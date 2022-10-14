@@ -4,11 +4,11 @@ use termion::{color, style};
 pub async fn info(msg: &str) {
     let now = chrono::Local::now();
     println!(
-        "{}[{}] {}{}",
+        "{}[{}] INFO {}{}",
         color::Fg(color::Green),
         now.format("%Y-%m-%d %H:%M:%S"),
-        msg,
-        style::Reset
+        style::Reset,
+        msg
     );
 }
 
@@ -16,11 +16,11 @@ pub async fn info(msg: &str) {
 pub async fn error(msg: &str) {
     let now = chrono::Local::now();
     println!(
-        "{}[{}] {}{}",
+        "{}[{}] ERROR {}{}",
         color::Fg(color::Red),
         now.format("%Y-%m-%d %H:%M:%S"),
-        msg,
-        style::Reset
+        style::Reset,
+        msg
     );
 }
 
@@ -28,10 +28,10 @@ pub async fn error(msg: &str) {
 pub async fn warn(msg: &str) {
     let now = chrono::Local::now();
     println!(
-        "{}[{}] {}{}",
+        "{}[{}] WARNING {}{}",
         color::Fg(color::Yellow),
         now.format("%Y-%m-%d %H:%M:%S"),
-        msg,
-        style::Reset
+        style::Reset,
+        msg
     );
 }

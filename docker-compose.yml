@@ -29,16 +29,16 @@ services:
   #   environment:
   #     - ALLOW_EMPTY_PASSWORD=yes
 
-  backend:
-    build: Backend
-    ports:
-      - 32112:32112
-    volumes:
-      - ./Backend:/usr/src/app
-    links:
-        # - mongo
-        # - redis
-        - postgres
+  # backend:
+  #   build: Backend
+  #   ports:
+  #     - 32112:32112
+  #   volumes:
+  #     - ./Backend:/usr/src/app
+  #   links:
+  #       # - mongo
+  #       # - redis
+  #       - postgres
 
 volumes:
   postgresvolume:
