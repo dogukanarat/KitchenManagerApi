@@ -1,4 +1,4 @@
-// disable rust compiler warnings
+#![allow(non_snake_case)]
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 #![allow(dead_code)]
@@ -35,14 +35,21 @@ async fn main() -> io::Result<()> {
         App::new()
             .wrap(middleware::Logger::default())
             .app_data(web::Data::new(database_manager.clone()))
-            .service(web::resource("/products").to(products::products_list))
-            .service(web::resource("/products/create/{name}").to(products::products_create))
             .service(
-                web::resource("/user/{name}")
-                    .name("user_detail")
-                    .guard(guard::Header("content-type", "application/json"))
-                    .route(web::get().to(HttpResponse::Ok))
-                    .route(web::put().to(HttpResponse::Ok)),
+                web::scope("/v1")
+                    .service(
+                        web::resource("/products")
+                            .route(web::get().to(products::get_products))
+                            .route(web::post().to(products::create_product))
+                            .route(web::delete().to(products::delete_product))
+                            .route(web::put().to(products::update_product)),
+                    )
+                    .service(
+                        web::resource("/products/{id}")
+                            .route(web::get().to(products::get_product_by_id))
+                            .route(web::delete().to(products::delete_product_by_id))
+                            .route(web::put().to(products::update_product_by_id)),
+                    ),
             )
     })
     .bind(("0.0.0.0", constants::SERVER_PORT))?
