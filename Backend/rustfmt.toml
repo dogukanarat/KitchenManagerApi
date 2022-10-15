@@ -1,0 +1,5 @@
+indent_style = "Visual"
+indent_size = 4
+reorder_imports = true
+wrap_line_length = 120
+brace_style = "AlwaysNextLine"
