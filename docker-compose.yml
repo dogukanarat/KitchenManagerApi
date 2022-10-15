@@ -1,24 +1,24 @@
 version: "3.4"
 
 services:
-  postgres:
-    image: postgres:latest
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
-    volumes:
-      - postgresvolume:/var/lib/postgresql/data
-    restart: always
-
-  # mongo:
-  #   image: mongo
+  # postgres:
+  #   image: postgres:latest
   #   ports:
-  #     - 27017:27017
+  #     - "5432:5432"
+  #   environment:
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: postgres
+  #     POSTGRES_DB: postgres
   #   volumes:
-  #     - mongodbvolume:/data/db
+  #     - postgresvolume:/var/lib/postgresql/data
+  #   restart: always
+
+  mongo:
+    image: mongo
+    ports:
+      - 27017:27017
+    volumes:
+      - mongodbvolume:/data/db
 
   # redis:
   #   image: redis
@@ -41,7 +41,7 @@ services:
   #       - postgres
 
 volumes:
-  postgresvolume:
-  # mongodbvolume:
+  # postgresvolume:
+  mongodbvolume:
   # redisvolume:
   

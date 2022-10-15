@@ -5,7 +5,7 @@ pub async fn info(msg: &str) {
     let now = chrono::Local::now();
     println!(
         "{}[{}] INFO {}{}",
-        color::Fg(color::Green),
+        color::Fg(color::Blue),
         now.format("%Y-%m-%d %H:%M:%S"),
         style::Reset,
         msg
@@ -30,6 +30,18 @@ pub async fn warn(msg: &str) {
     println!(
         "{}[{}] WARNING {}{}",
         color::Fg(color::Yellow),
+        now.format("%Y-%m-%d %H:%M:%S"),
+        style::Reset,
+        msg
+    );
+}
+
+// this function print success message with timestamp
+pub async fn success(msg: &str) {
+    let now = chrono::Local::now();
+    println!(
+        "{}[{}] SUCCESS {}{}",
+        color::Fg(color::Green),
         now.format("%Y-%m-%d %H:%M:%S"),
         style::Reset,
         msg
