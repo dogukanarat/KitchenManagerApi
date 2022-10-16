@@ -7,10 +7,9 @@ use actix_web::{guard, middleware, web, App, HttpResponse, HttpServer};
 use std::{env, io};
 use dotenv::dotenv;
 
+mod products;
 mod console;
 mod constants;
-mod products;
-mod models;
 mod database;
 
 #[actix_rt::main]
@@ -39,16 +38,16 @@ async fn main() -> io::Result<()> {
                 web::scope("/v1")
                     .service(
                         web::resource("/products")
-                            .route(web::get().to(products::get_products))
-                            .route(web::post().to(products::create_product))
-                            .route(web::delete().to(products::delete_product))
-                            .route(web::put().to(products::update_product)),
+                            .route(web::get().to(products::service::list))
+                            .route(web::post().to(products::service::create))
+                            .route(web::delete().to(products::service::delete))
+                            .route(web::put().to(products::service::update)),
                     )
                     .service(
                         web::resource("/products/{id}")
-                            .route(web::get().to(products::get_product_by_id))
-                            .route(web::delete().to(products::delete_product_by_id))
-                            .route(web::put().to(products::update_product_by_id)),
+                            .route(web::get().to(products::service::get_by_id))
+                            .route(web::delete().to(products::service::delete_by_id))
+                            .route(web::put().to(products::service::update_by_id)),
                     ),
             )
     })
