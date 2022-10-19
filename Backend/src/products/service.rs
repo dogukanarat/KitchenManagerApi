@@ -1,125 +1,209 @@
+use super::collection::*;
 use super::model::*;
+use crate::common_model::CommonResponse;
 use crate::console;
 use crate::database::Database;
 use actix_web::Responder;
 use actix_web::{web, HttpResponse};
+use env_logger::{Builder, Env};
+use log;
 use serde::{Deserialize, Serialize};
 
-pub async fn create(database_data: web::Data<Database>,
-                    request: web::Json<ProductCreateRequest>)
-                    -> impl Responder
+pub async fn create(
+    database_data: web::Data<Database>,
+    content: web::Json<ProductCreateRequest>,
+) -> impl Responder
 {
-    console::info("Create Product requested...").await;
+    info!("Create Product requested...");
 
-    let content = request.into_inner();
+    let collection = database_data.products().await;
 
-    let insertion_result = database_data.products()
-                                        .await
-                                        .products_create(content)
-                                        .await;
+    let insertion_result = collection.create(content.into_inner()).await;
 
-    let inserted_data = insertion_result.unwrap().inserted_id;
-
-    HttpResponse::Ok().json(inserted_data)
+    match insertion_result
+    {
+        Ok(result) =>
+        {
+            let inserted_data = result.inserted_id;
+            HttpResponse::Ok().json(inserted_data)
+        },
+        Err(error) => match error
+        {
+            ProductCollectionError::ProductNameExists =>
+            {
+                let response = CommonResponse::<Product> {
+                    message: "Product name already exist.".to_string(),
+                    data: None,
+                };
+                HttpResponse::BadRequest().json(response)
+            },
+            ProductCollectionError::CustomError(message) =>
+            {
+                let response = CommonResponse::<Product> {
+                    message,
+                    data: None,
+                };
+                HttpResponse::BadRequest().json(response)
+            },
+            _ =>
+            {
+                let response = CommonResponse::<Product> {
+                    message: "Unknown error.".to_string(),
+                    data: None,
+                };
+                HttpResponse::BadRequest().json(response)
+            },
+        },
+    }
 }
 
-pub async fn list(database_data: web::Data<Database>,
-                  query: web::Query<ProductListQuery>)
-                  -> impl Responder
+pub async fn list(
+    database_data: web::Data<Database>,
+    query: web::Query<ProductListQuery>,
+) -> impl Responder
 {
-    console::info("List Products requested...").await;
+    info!("List Products requested...");
 
-    let start = query.start.unwrap_or(0);
-    let count = query.count.unwrap_or(0);
+    let offset = query.offset.unwrap_or(0);
+    let limit = query.limit.unwrap_or(0);
 
-    let products = database_data.products()
-                                .await
-                                .products_list(start, count)
-                                .await
-                                .expect("Failed to get products.");
+    let collection = database_data.products().await;
 
-    HttpResponse::Ok().json(products)
+    let result = collection.list(offset, limit).await;
+
+    match result
+    {
+        Ok(products) => HttpResponse::Ok().json(products),
+        Err(error) =>
+        {
+            error!("Failed to get products. Error: {:?}", error);
+            HttpResponse::InternalServerError().finish()
+        },
+    }
 }
 
-pub async fn update(database_data: web::Data<Database>,
-                    request: web::Json<ProductUpdateRequest>)
-                    -> impl Responder
+pub async fn update(
+    database_data: web::Data<Database>,
+    id: web::Path<String>,
+    content: web::Json<ProductUpdateRequest>,
+) -> impl Responder
 {
-    console::info("Update Product requested...").await;
+    info!("Update Product requested...");
 
-    let filter = request.filter.clone();
-    let content = request.content.clone();
+    let collection = database_data.products().await;
 
-    let update_result = database_data.products()
-                                     .await
-                                     .products_update(filter, content)
-                                     .await;
+    let update_result = collection
+        .update(id.into_inner(), content.into_inner())
+        .await;
 
-    let updated_data = update_result.unwrap().modified_count;
-
-    HttpResponse::Ok().json(updated_data)
+    match update_result
+    {
+        Ok(result) =>
+        {
+            let updated_data = result.modified_count;
+            let response = CommonResponse::<Product> {
+                message: format!("{} products updated.", updated_data),
+                data: None,
+            };
+            HttpResponse::Ok().json(response)
+        },
+        Err(error) =>
+        {
+            match error
+            {
+                ProductCollectionError::ProductNotFound =>
+                {
+                    let response = CommonResponse::<Product> {
+                        message: "Product not found.".to_string(),
+                        data: None,
+                    };
+                    HttpResponse::NotFound().json(response)
+                },
+                ProductCollectionError::ProductNotMofified =>
+                {
+                    let response = CommonResponse::<Product> {
+                        message: "Product not modified.".to_string(),
+                        data: None,
+                    };
+                    HttpResponse::BadRequest().json(response)
+                },
+                ProductCollectionError::CustomError(message) =>
+                {
+                    let response = CommonResponse::<Product> {
+                        message,
+                        data: None,
+                    };
+                    HttpResponse::BadRequest().json(response)
+                },
+                _ =>
+                {
+                    let response = CommonResponse::<Product> {
+                        message: "Unknown error.".to_string(),
+                        data: None,
+                    };
+                    HttpResponse::BadRequest().json(response)
+                },
+            }
+        },
+    }
 }
 
-pub async fn delete(database_data: web::Data<Database>,
-                    request: web::Json<ProductDeleteRequest>)
-                    -> impl Responder
+pub async fn delete(database_data: web::Data<Database>, id: web::Path<String>) -> impl Responder
 {
-    console::info("Delete Product requested...").await;
+    let collection = database_data.products().await;
 
-    let filter = request.filter.clone();
+    let result = collection.delete(id.into_inner()).await;
 
-    let delete_result = database_data.products().await.products_delete(filter).await;
+    match result
+    {
+        Ok(result) =>
+        {
+            if result.deleted_count == 0
+            {
+                let response = CommonResponse::<Product> {
+                    message: "Product not found.".to_string(),
+                    data: None,
+                };
+                HttpResponse::NotFound().json(response)
+            }
+            else
+            {
+                let response = CommonResponse::<Product> {
+                    message: format!("{} products deleted.", result.deleted_count),
+                    data: None,
+                };
+                HttpResponse::Ok().json(response)
+            }
+        },
+        Err(error) =>
+        {
+            let response = CommonResponse::<String> {
+                message: "Unknown error.".to_string(),
+                data: None,
+            };
 
-    let deleted_data = delete_result.unwrap().deleted_count;
+            error!("Failed to delete product. Error: {:?}", error);
 
-    HttpResponse::Ok().json(deleted_data)
+            HttpResponse::InternalServerError().json(response)
+        },
+    }
 }
 
-pub async fn get_by_id(database_data: web::Data<Database>, id: web::Path<String>)
-                       -> impl Responder
+pub async fn get(database_data: web::Data<Database>, id: web::Path<String>) -> impl Responder
 {
-    console::info("Get Product by ID requested...").await;
+    info!("Get Product by ID requested...");
 
-    let product = database_data.products()
-                               .await
-                               .products_get_by_id(id.into_inner())
-                               .await
-                               .expect("Failed to get product.");
+    let collection = database_data.products().await;
 
-    HttpResponse::Ok().json(product)
-}
+    let result = collection.get(id.into_inner()).await;
 
-pub async fn delete_by_id(database_data: web::Data<Database>,
-                          id: web::Path<String>)
-                          -> impl Responder
-{
-    console::info("Delete Product by ID requested...").await;
-
-    let delete_result = database_data.products()
-                                     .await
-                                     .products_delete_by_id(id.into_inner())
-                                     .await;
-
-    let deleted_data = delete_result.unwrap().deleted_count;
-
-    HttpResponse::Ok().json(deleted_data)
-}
-
-pub async fn update_by_id(database_data: web::Data<Database>,
-                          id: web::Path<String>,
-                          request: web::Json<ProductUpdateRequestContent>)
-                          -> impl Responder
-{
-    console::info("Update Product by ID requested...").await;
-
-    let content = request.into_inner();
-
-    let update_result = database_data.products()
-                                     .await
-                                     .products_update_by_id(id.into_inner(), content)
-                                     .await;
-
-    let updated_data = update_result.unwrap().modified_count;
-
-    HttpResponse::Ok().json(updated_data)
+    match result
+    {
+        Ok(product) => HttpResponse::Ok().json(product),
+        Err(error) =>
+        {
+            error!("Failed to get product. Error: {:?}", error);
+            HttpResponse::InternalServerError().finish()
+        },
+    }
 }

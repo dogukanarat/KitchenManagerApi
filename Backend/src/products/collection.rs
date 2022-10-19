@@ -1,20 +1,31 @@
 extern crate dotenv;
 use dotenv::dotenv;
 use futures::StreamExt;
+use log;
+use mongodb::bson::oid::ObjectId;
 use mongodb::{
     bson::{doc, extjson::de::Error},
-    results::{InsertOneResult, UpdateResult, DeleteResult},
+    results::{DeleteResult, InsertOneResult, UpdateResult},
     Client, Collection,
 };
-use std::env;
+use std::{env, str::FromStr};
 
-use crate::console;
 use super::model::*;
+use crate::console;
 
 #[derive(Clone)]
 pub struct ProductCollection
 {
     collection_products: Collection<Product>,
+}
+
+#[derive(Debug)]
+pub enum ProductCollectionError
+{
+    ProductNameExists,
+    ProductNotFound,
+    ProductNotMofified,
+    CustomError(String),
 }
 
 impl ProductCollection
@@ -23,156 +34,202 @@ impl ProductCollection
     {
         let collection_products: Collection<Product> = database.collection("Products");
 
-        ProductCollection { collection_products }
+        ProductCollection {
+            collection_products,
+        }
     }
 
-    pub async fn products_create(&self, content: ProductCreateRequest) -> Result<InsertOneResult, Error>
+    pub async fn create(
+        &self,
+        content: ProductCreateRequest,
+    ) -> Result<InsertOneResult, ProductCollectionError>
     {
-        console::info("Creating product...").await;
+        info!("Creating product...");
 
-        let new_product = Product { id: None,
-                                    name: content.name,
-                                    price: content.price };
+        let is_exist = self.is_name_exist(content.name.clone()).await;
 
-        let product = self.collection_products
-                          .insert_one(new_product, None)
-                          .await
-                          .ok()
-                          .expect("Failed to insert document.");
+        match is_exist
+        {
+            Ok(true) =>
+            {
+                error!("Product name already exist.");
+                Err(ProductCollectionError::ProductNameExists)
+            },
+            Ok(false) =>
+            {
+                let product = Product {
+                    id: None,
+                    name: content.name,
+                    price: content.price,
+                    kind: content.kind,
+                };
 
-        console::success("Created product...").await;
+                let result = self.collection_products.insert_one(product, None).await;
 
-        Ok(product)
+                match result
+                {
+                    Ok(result) => Ok(result),
+                    Err(_) => Err(ProductCollectionError::CustomError(
+                        "Failed to create product.".to_string(),
+                    )),
+                }
+            },
+            Err(_) =>
+            {
+                error!("Failed to check product name.");
+                Err(ProductCollectionError::CustomError(
+                    "Failed to check product name.".to_string(),
+                ))
+            },
+        }
     }
 
-    pub async fn products_list(&self, start: u64, count: i64) -> Result<Vec<Product>, Error>
+    pub async fn list(
+        &self,
+        offset: u64,
+        limit: i64,
+    ) -> Result<Vec<Product>, ProductCollectionError>
     {
-        console::info("Listing product...").await;
+        info!("Listing product...");
 
-        let find_options = mongodb::options::FindOptions::builder().skip(start)
-                                                                   .limit(count)
-                                                                   .build();
+        let find_options = mongodb::options::FindOptions::builder()
+            .skip(offset)
+            .limit(limit)
+            .build();
 
-        let mut products_cursor = self.collection_products
-                                      .find(None, find_options)
-                                      .await
-                                      .ok()
-                                      .expect("Failed to execute find.");
+        let mut products_cursor = self
+            .collection_products
+            .find(None, find_options)
+            .await
+            .ok()
+            .expect("Failed to execute find.");
 
         let mut products_list: Vec<Product> = Vec::new();
 
-        while let Some(product) = products_cursor.next().await {
+        while let Some(product) = products_cursor.next().await
+        {
             products_list.push(product.unwrap());
         }
 
-        console::success("Listed product...").await;
+        info!("Listed product...");
 
         Ok(products_list)
     }
 
-    pub async fn products_update(&self,
-                                 filter: ProductRequestFilter,
-                                 content: ProductUpdateRequestContent)
-                                 -> Result<UpdateResult, Error>
+    pub async fn update(
+        &self,
+        req_id: String,
+        content: ProductUpdateRequest,
+    ) -> Result<UpdateResult, ProductCollectionError>
     {
-        console::info("Updating product...").await;
+        info!("Updating product...");
 
-        let filter = doc! { "name": filter.name };
-        let update = doc! { "$set": { "name": content.name, "price": content.price } };
-
-        let result = self.collection_products
-                         .update_one(filter, update, None)
-                         .await
-                         .expect("Failed to update document.");
-
-        console::success("Updated product...").await;
-
-        Ok(result)
-    }
-
-    pub async fn products_find(&self, filter: ProductRequestFilter) -> Result<Product, Error>
-    {
-        console::info("Finding product...").await;
-
-        let filter = doc! { "name": filter.name };
-
-        let product = self.collection_products
-                          .find_one(filter, None)
-                          .await
-                          .ok()
-                          .expect("Failed to execute find.");
-
-        console::success("Found product...").await;
-
-        Ok(product.unwrap())
-    }
-
-    pub async fn products_delete(&self, filter: ProductRequestFilter) -> Result<DeleteResult, Error>
-    {
-        console::info("Deleting product...").await;
-
-        let filter = doc! { "name": filter.name };
-
-        let result = self.collection_products
-                         .delete_one(filter, None)
-                         .await
-                         .expect("Failed to delete document.");
-
-        console::success("Deleted product...").await;
-
-        Ok(result)
-    }
-
-    pub async fn products_get_by_id(&self, id: String) -> Result<Product, Error>
-    {
-        console::info("Getting product by id...").await;
-
-        let filter = doc! { "_id": id };
-
-        let product = self.collection_products
-                          .find_one(filter, None)
-                          .await
-                          .ok()
-                          .expect("Failed to execute find.");
-
-        console::success("Got product by id...").await;
-
-        Ok(product.unwrap())
-    }
-
-    pub async fn products_delete_by_id(&self, id: String) -> Result<DeleteResult, Error>
-    {
-        console::info("Deleting product by id...").await;
-
-        let filter = doc! { "_id": id };
-
-        let result = self.collection_products
-                         .delete_one(filter, None)
-                         .await
-                         .expect("Failed to delete document.");
-
-        console::success("Deleted product by id...").await;
-
-        Ok(result)
-    }
-
-    pub async fn products_update_by_id(&self,
-                                       id: String,
-                                       content: ProductUpdateRequestContent)
-                                       -> Result<UpdateResult, Error>
-    {
-        console::info("Updating product by id...").await;
+        let id = ObjectId::from_str(&req_id).unwrap();
 
         let filter = doc! { "_id": id };
         let update = doc! { "$set": { "name": content.name, "price": content.price } };
 
-        let result = self.collection_products
-                         .update_one(filter, update, None)
-                         .await
-                         .expect("Failed to update document.");
+        let result = self
+            .collection_products
+            .update_one(filter, update, None)
+            .await;
 
-        console::success("Updated product by id...").await;
+        match result
+        {
+            Ok(result) =>
+            {
+                if result.matched_count == 0
+                {
+                    error!("Product not found.");
+                    return Err(ProductCollectionError::ProductNotFound);
+                }
 
-        Ok(result)
+                if result.modified_count == 0
+                {
+                    error!("Product not modified.");
+                    return Err(ProductCollectionError::ProductNotMofified);
+                }
+
+                Ok(result)
+            },
+            Err(error) =>
+            {
+                error!("Failed to update product. Error: {:?}", error);
+                Err(ProductCollectionError::CustomError(
+                    format!("Failed to update product. Error: {:?}", error).to_string(),
+                ))
+            },
+        }
+    }
+
+    pub async fn get(&self, id: String) -> Result<Product, ProductCollectionError>
+    {
+        info!("Getting product by id...");
+
+        let filter = doc! { "_id": id };
+
+        let result = self.collection_products.find_one(filter, None).await;
+
+        match result
+        {
+            Ok(Some(product)) => Ok(product),
+            Ok(None) =>
+            {
+                error!("Product not found.");
+                Err(ProductCollectionError::ProductNotFound)
+            },
+            Err(_) =>
+            {
+                error!("Failed to get product by id.");
+                Err(ProductCollectionError::CustomError(
+                    "Failed to get product by id.".to_string(),
+                ))
+            },
+        }
+    }
+
+    pub async fn delete(&self, req_id: String) -> Result<DeleteResult, ProductCollectionError>
+    {
+        info!("Deleting product by id...");
+
+        let id = ObjectId::from_str(&req_id).unwrap();
+
+        let filter = doc! { "_id": id };
+
+        let result = self.collection_products.delete_one(filter, None).await;
+
+        match result
+        {
+            Ok(result) => Ok(result),
+            Err(_) =>
+            {
+                error!("Failed to delete product by id.");
+                Err(ProductCollectionError::CustomError(
+                    "Failed to delete product by id.".to_string(),
+                ))
+            },
+        }
+    }
+
+    pub async fn is_name_exist(&self, name: String) -> Result<bool, ProductCollectionError>
+    {
+        info!("Checking if product name is exist...");
+
+        let filter = doc! { "name": name };
+
+        let product = self.collection_products.find_one(filter, None).await;
+
+        match product
+        {
+            Ok(Some(_)) => Ok(true),
+            Ok(None) => Ok(false),
+            Err(_) =>
+            {
+                error!("Failed to check product name.");
+                Err(ProductCollectionError::CustomError(
+                    "Failed to check product name.".to_string(),
+                ))
+            },
+        }
     }
 }

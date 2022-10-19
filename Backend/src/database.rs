@@ -23,7 +23,7 @@ impl Database
     {
         dotenv().ok();
 
-        let uri = match env::var("MONGOURI") {
+        let uri = match env::var("MONGO_URI") {
             Ok(key) => key.to_string(),
             Err(_) => format!("Error loading env variable"),
         };
