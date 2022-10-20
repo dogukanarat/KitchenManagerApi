@@ -16,6 +16,7 @@ mod console;
 mod constants;
 mod database;
 mod products;
+mod orders;
 
 #[actix_rt::main]
 async fn main() -> io::Result<()>
@@ -24,7 +25,7 @@ async fn main() -> io::Result<()>
     dotenv().ok();
 
     // get required environment variables
-    env::set_var("RUST_LOG", "actix_web=debug,actix_server=info,products=error");
+    env::set_var("RUST_LOG", "info");
 
     info!("Initializing environment variables...");
     // start logger
@@ -40,7 +41,11 @@ async fn main() -> io::Result<()>
         App::new()
             .wrap(middleware::Logger::default())
             .app_data(web::Data::new(database_manager.clone()))
-            .service(web::scope("/v1").configure(products::config))
+            .service(
+                web::scope("/v1")
+                .configure(products::config)
+                .configure(orders::config)
+            )
     })
     .bind(("0.0.0.0", constants::SERVER_PORT))?
     .run()

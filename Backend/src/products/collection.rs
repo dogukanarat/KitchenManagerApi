@@ -162,9 +162,11 @@ impl ProductCollection
         }
     }
 
-    pub async fn get(&self, id: String) -> Result<Product, ProductCollectionError>
+    pub async fn get(&self, req_id: String) -> Result<Product, ProductCollectionError>
     {
         info!("Getting product by id...");
+
+        let id = ObjectId::from_str(&req_id).unwrap();
 
         let filter = doc! { "_id": id };
 
@@ -230,6 +232,35 @@ impl ProductCollection
                     "Failed to check product name.".to_string(),
                 ))
             },
+        }
+    }
+
+    pub async fn get_product_price(&self, req_id: String) -> Result<f32, ProductCollectionError>
+    {
+        info!("Getting product price by id...");
+
+        let id = ObjectId::from_str(&req_id).unwrap();
+
+        let filter = doc! { "_id": id };
+
+        let result = self.collection_products.find_one(filter, None).await;
+
+        match result
+        {
+            Ok(Some(product)) => Ok(product.price),
+            Ok(None) =>
+            {
+                error!("Product not found.");
+                Err(ProductCollectionError::ProductNotFound)
+            },
+            Err(error) =>
+            {
+                error!("Failed to get product price by id. Error: {:?}", error);
+                Err(ProductCollectionError::CustomError(
+                    format!("Failed to get product price by id. Error: {:?}", error).to_string(),
+                ))
+            },
+            
         }
     }
 }
