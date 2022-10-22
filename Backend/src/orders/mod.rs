@@ -1,6 +1,7 @@
 pub mod collection;
 pub mod model;
 pub mod service;
+pub mod stream;
 
 use actix_web::{web, App, HttpServer, Scope};
 
@@ -14,10 +15,15 @@ pub fn config(config: &mut web::ServiceConfig)
             .route(web::get().to(service::list))
         )
         .service(
+            web::resource("/events/update")
+            .route(web::get().to(stream::order_update))
+        )
+        .service(
             web::resource("/{id}")
             .route(web::get().to(service::get))
             .route(web::put().to(service::update))
             .route(web::delete().to(service::delete))
         )
+        
     );
 }

@@ -3,35 +3,46 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
-use actix_web::{guard, middleware, web, App, HttpResponse, HttpServer};
+use actix_cors::Cors;
+use actix_files::{Files, NamedFile};
+use actix_web::{
+    get, guard, http::header, middleware, post, web, App, HttpResponse, HttpServer, Responder,
+};
+
 use dotenv::dotenv;
 use env_logger::{Builder, Env};
-use std::{env, io};
+use std::{
+    collections::HashMap,
+    env, io,
+    sync::{Arc, Mutex},
+};
 
 #[macro_use]
 extern crate log;
 
+mod broadcast;
 mod common_model;
 mod console;
 mod constants;
 mod database;
-mod products;
 mod orders;
+mod products;
 
 #[actix_rt::main]
-async fn main() -> io::Result<()>
-{
+async fn main() -> io::Result<()> {
     // load .env file
     dotenv().ok();
 
     // get required environment variables
-    env::set_var("RUST_LOG", "info");
+    env::set_var("RUST_LOG", "debug");
 
     info!("Initializing environment variables...");
     // start logger
     env_logger::init();
 
+    // create managers
     let database_manager = database::Database::init().await;
+    let broadcast_manager = broadcast::Broadcaster::create();
 
     // info message for listing server address and port
     info!("Listening on {}...", constants::SERVER_PORT);
@@ -40,14 +51,62 @@ async fn main() -> io::Result<()>
     HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
+            // .wrap(
+            //     Cors::new()
+            //         .send_wildcard()
+            //         .allowed_methods(vec!["GET", "POST"])
+            //         .allowed_headers(vec![
+            //             header::AUTHORIZATION,
+            //             header::ACCEPT,
+            //             header::CONTENT_TYPE,
+            //         ])
+            //         .max_age(3600)
+            //         .finish(),
+            // )
             .app_data(web::Data::new(database_manager.clone()))
+            .app_data(web::Data::from(Arc::clone(&broadcast_manager)))
             .service(
                 web::scope("/v1")
-                .configure(products::config)
-                .configure(orders::config)
+                    .configure(products::config)
+                    .configure(orders::config),
             )
+            .route("/", web::get().to(index))
     })
     .bind(("0.0.0.0", constants::SERVER_PORT))?
     .run()
     .await
+}
+
+async fn index() -> impl Responder {
+    let content = r#"<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="ie=edge">
+        <title>Server-sent events</title>
+        <style>
+            p {
+                margin-top: 0.5em;
+                margin-bottom: 0.5em;
+            }
+        </style>
+    </head>
+    <body>
+        <div>Files Downloaded: <span id="root"></span></div>
+        <div><a href="/download" target="_blank">Download</a></div>
+        <script>
+            let root = document.getElementById("root");
+            let events = new EventSource("/v1/orders/events/update");
+            let data = document.createElement("p");
+            root.appendChild(data);
+            events.addEventListener("counter", (event) => {
+                data.innerText = event.data;
+            });
+        </script>
+    </body>
+    </html>"#;
+
+    HttpResponse::Ok()
+        .append_header(header::ContentType("text/html".parse().unwrap()))
+        .body(content)
 }

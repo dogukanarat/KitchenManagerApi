@@ -1,5 +1,7 @@
 use super::collection::*;
 use super::model::*;
+use super::stream;
+use crate::broadcast;
 use crate::common_model::CommonResponse;
 use crate::console;
 use crate::database::Database;
@@ -86,19 +88,25 @@ pub async fn list(
     }
 }
 
+
 pub async fn update(
     database_data: web::Data<Database>,
+    broadcaster: web::Data<std::sync::Mutex<broadcast::Broadcaster>>,
     id: web::Path<String>,
     content: web::Json<OrderUpdateRequest>,
 ) -> impl Responder
 {
     info!("Update Product requested...");
 
+    let internal_id = id.into_inner();
+
     let collection = database_data.orders().await;
 
     let update_result = collection
-        .update(id.into_inner(), content.into_inner())
+        .update(internal_id.clone(), content.into_inner())
         .await;
+
+    broadcast::broadcast("counter".to_string(), internal_id.clone(), broadcaster);
 
     match update_result
     {
@@ -115,6 +123,22 @@ pub async fn update(
         {
             match error
             {
+                OrderCollectionError::OrderNotModified =>
+                {
+                    let response = CommonResponse::<Order> {
+                        message: "Order Not Modified".to_string(),
+                        data: None,
+                    };
+                    HttpResponse::NotFound().json(response)
+                },
+                OrderCollectionError::CustomError(message) =>
+                {
+                    let response = CommonResponse::<Order> {
+                        message,
+                        data: None,
+                    };
+                    HttpResponse::BadRequest().json(response)
+                },
                 _ =>
                 {
                     let response = CommonResponse::<Order> {

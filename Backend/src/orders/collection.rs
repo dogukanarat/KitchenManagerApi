@@ -2,7 +2,7 @@ extern crate dotenv;
 use dotenv::dotenv;
 use futures::StreamExt;
 use mongodb::{
-    bson::{doc, extjson::de::Error, oid::ObjectId},
+    bson::{doc, extjson::de::Error, oid::ObjectId, self},
     results::{DeleteResult, InsertOneResult, UpdateResult},
     Client, Collection,
 };
@@ -197,9 +197,10 @@ impl OrderCollection
 
         let filter = doc! { "_id": id };
 
-        let status_as_string = serde_json::to_string(&content.status).unwrap();
+        let status_as_string = bson::to_bson(&content.status).unwrap();
+        let status = status_as_string.as_str().unwrap();
 
-        let update = doc! { "$set": { "status": status_as_string } };
+        let update = doc! { "$set": { "status": status } };
 
         let result = self.collection_order.update_one(filter, update, None).await;
 
