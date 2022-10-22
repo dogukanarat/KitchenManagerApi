@@ -51,18 +51,17 @@ async fn main() -> io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
-            // .wrap(
-            //     Cors::new()
-            //         .send_wildcard()
-            //         .allowed_methods(vec!["GET", "POST"])
-            //         .allowed_headers(vec![
-            //             header::AUTHORIZATION,
-            //             header::ACCEPT,
-            //             header::CONTENT_TYPE,
-            //         ])
-            //         .max_age(3600)
-            //         .finish(),
-            // )
+            .wrap(
+                Cors::default()
+                    .send_wildcard()
+                    .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
+                    // .allowed_headers(vec![
+                    //     header::AUTHORIZATION,
+                    //     header::ACCEPT,
+                    //     header::CONTENT_TYPE,
+                    // ])
+                    .max_age(3600),
+            )
             .app_data(web::Data::new(database_manager.clone()))
             .app_data(web::Data::from(Arc::clone(&broadcast_manager)))
             .service(
@@ -92,14 +91,18 @@ async fn index() -> impl Responder {
         </style>
     </head>
     <body>
-        <div>Files Downloaded: <span id="root"></span></div>
-        <div><a href="/download" target="_blank">Download</a></div>
+        <div>
+        Order Activities:
+        <span id="root"></span>
+        </div>
         <script>
             let root = document.getElementById("root");
+
             let events = new EventSource("/v1/orders/events/update");
-            let data = document.createElement("p");
-            root.appendChild(data);
-            events.addEventListener("counter", (event) => {
+            
+            events.addEventListener("order_update", (event) => {
+                let data = document.createElement("p");
+                root.appendChild(data);
                 data.innerText = event.data;
             });
         </script>

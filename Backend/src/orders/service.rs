@@ -14,26 +14,23 @@ use serde::{Deserialize, Serialize};
 pub async fn create(
     database_data: web::Data<Database>,
     content: web::Json<OrderCreateRequest>,
-) -> impl Responder
-{
+) -> impl Responder {
     info!("Create Order requested...");
 
     let collection = database_data.orders().await;
     let collection_products = database_data.products().await;
 
-    let insertion_result = collection.create(content.into_inner(), collection_products).await;
+    let insertion_result = collection
+        .create(content.into_inner(), collection_products)
+        .await;
 
-    match insertion_result
-    {
-        Ok(result) =>
-        {
+    match insertion_result {
+        Ok(result) => {
             let inserted_data = result.inserted_id;
             HttpResponse::Ok().json(inserted_data)
         },
-        Err(error) => match error
-        {
-            OrderCollectionError::OneOfProductsNotFound =>
-            {
+        Err(error) => match error {
+            OrderCollectionError::OneOfProductsNotFound => {
                 let response = CommonResponse::<Order> {
                     message: "One of products not found.".to_string(),
                     data: None,
@@ -41,8 +38,7 @@ pub async fn create(
 
                 HttpResponse::BadRequest().json(response)
             },
-            OrderCollectionError::CustomError(message) =>
-            {
+            OrderCollectionError::CustomError(message) => {
                 let response = CommonResponse::<Order> {
                     message,
                     data: None,
@@ -50,15 +46,13 @@ pub async fn create(
 
                 HttpResponse::BadRequest().json(response)
             },
-            _ =>
-            {
+            _ => {
                 let response = CommonResponse::<Order> {
                     message: "Unknown error.".to_string(),
                     data: None,
                 };
                 HttpResponse::BadRequest().json(response)
             },
-        
         },
     }
 }
@@ -66,8 +60,7 @@ pub async fn create(
 pub async fn list(
     database_data: web::Data<Database>,
     query: web::Query<OrderListQuery>,
-) -> impl Responder
-{
+) -> impl Responder {
     info!("[Service] List Order requested...");
 
     let offset = query.offset.unwrap_or(0);
@@ -77,101 +70,90 @@ pub async fn list(
 
     let result = collection.list(offset, limit).await;
 
-    match result
-    {
+    match result {
         Ok(orders) => HttpResponse::Ok().json(orders),
-        Err(error) =>
-        {
+        Err(error) => {
             error!("[Service] Failed to get order. Error: {:?}", error);
             HttpResponse::InternalServerError().finish()
         },
     }
 }
 
-
 pub async fn update(
     database_data: web::Data<Database>,
     broadcaster: web::Data<std::sync::Mutex<broadcast::Broadcaster>>,
     id: web::Path<String>,
     content: web::Json<OrderUpdateRequest>,
-) -> impl Responder
-{
+) -> impl Responder {
     info!("Update Product requested...");
 
     let internal_id = id.into_inner();
+    let internal_content = content.into_inner();
 
     let collection = database_data.orders().await;
 
     let update_result = collection
-        .update(internal_id.clone(), content.into_inner())
+        .update(internal_id.clone(), internal_content.clone())
         .await;
 
-    broadcast::broadcast("counter".to_string(), internal_id.clone(), broadcaster);
-
-    match update_result
-    {
-        Ok(result) =>
-        {
+    match update_result {
+        Ok(result) => {
             let updated_data = result.modified_count;
             let response = CommonResponse::<Order> {
-                message: format!("{} order updated.", updated_data),
+                message: format!(
+                    "{} order status updated as {:?}.",
+                    internal_id.clone(),
+                    internal_content.clone().clone()
+                ),
                 data: None,
             };
+
+            let broadcast_message = serde_json::to_string(&response.clone()).unwrap();
+
+            broadcast::broadcast("order_update".to_string(), broadcast_message, broadcaster);
+
             HttpResponse::Ok().json(response)
         },
-        Err(error) =>
-        {
-            match error
-            {
-                OrderCollectionError::OrderNotModified =>
-                {
-                    let response = CommonResponse::<Order> {
-                        message: "Order Not Modified".to_string(),
-                        data: None,
-                    };
-                    HttpResponse::NotFound().json(response)
-                },
-                OrderCollectionError::CustomError(message) =>
-                {
-                    let response = CommonResponse::<Order> {
-                        message,
-                        data: None,
-                    };
-                    HttpResponse::BadRequest().json(response)
-                },
-                _ =>
-                {
-                    let response = CommonResponse::<Order> {
-                        message: "Unknown error.".to_string(),
-                        data: None,
-                    };
-                    HttpResponse::BadRequest().json(response)
-                },
-            }
+        Err(error) => match error {
+            OrderCollectionError::OrderNotModified => {
+                let response = CommonResponse::<Order> {
+                    message: "Order Not Modified".to_string(),
+                    data: None,
+                };
+                HttpResponse::NotFound().json(response)
+            },
+            OrderCollectionError::CustomError(message) => {
+                let response = CommonResponse::<Order> {
+                    message,
+                    data: None,
+                };
+                HttpResponse::BadRequest().json(response)
+            },
+            _ => {
+                let response = CommonResponse::<Order> {
+                    message: "Unknown error.".to_string(),
+                    data: None,
+                };
+                HttpResponse::BadRequest().json(response)
+            },
         },
     }
 }
 
-pub async fn delete(database_data: web::Data<Database>, id: web::Path<String>) -> impl Responder
-{
+pub async fn delete(database_data: web::Data<Database>, id: web::Path<String>) -> impl Responder {
     let collection = database_data.orders().await;
 
     let result = collection.delete(id.into_inner()).await;
 
-    match result
-    {
-        Ok(result) =>
-        {
-            if result.deleted_count == 0
-            {
+    match result {
+        Ok(result) => {
+            if result.deleted_count == 0 {
                 let response = CommonResponse::<Order> {
                     message: "Order not found.".to_string(),
                     data: None,
                 };
                 HttpResponse::NotFound().json(response)
-            }
-            else
-            {
+            } else {
                 let response = CommonResponse::<Order> {
                     message: format!("{} orders deleted.", result.deleted_count),
                     data: None,
@@ -179,10 +161,8 @@ pub async fn delete(database_data: web::Data<Database>, id: web::Path<String>) -
                 HttpResponse::Ok().json(response)
             }
         },
-        Err(error) =>
-        {
-            let response = CommonResponse::<String> 
-            {
+        Err(error) => {
+            let response = CommonResponse::<String> {
                 message: "Unknown error.".to_string(),
                 data: None,
             };
@@ -194,19 +174,16 @@ pub async fn delete(database_data: web::Data<Database>, id: web::Path<String>) -
     }
 }
 
-pub async fn get(database_data: web::Data<Database>, id: web::Path<String>) -> impl Responder
-{
+pub async fn get(database_data: web::Data<Database>, id: web::Path<String>) -> impl Responder {
     info!("Get Product by ID requested...");
 
     let collection = database_data.orders().await;
 
     let result = collection.get(id.into_inner()).await;
 
-    match result
-    {
+    match result {
         Ok(product) => HttpResponse::Ok().json(product),
-        Err(error) =>
-        {
+        Err(error) => {
             error!("Failed to get product. Error: {:?}", error);
             HttpResponse::InternalServerError().finish()
         },

@@ -10,7 +10,7 @@ pub async fn order_update(
 
     let mut new_hashmap = HashMap::<String, String>::new();
 
-    new_hashmap.insert("counter".to_string(), "0".to_string());
+    new_hashmap.insert("order_update".to_string(), "".to_string());
 
     let rx = broadcaster.lock().unwrap().new_client(new_hashmap);
 
