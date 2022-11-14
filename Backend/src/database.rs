@@ -10,12 +10,10 @@ use std::env;
 
 use crate::console;
 use crate::orders::{self};
-use crate::products::{self};
 
 #[derive(Clone)]
 pub struct Database
 {
-    collection_products: products::collection::ProductCollection,
     collection_orders: orders::collection::OrderCollection,
 }
 
@@ -35,19 +33,11 @@ impl Database
 
         let database = client.database("KitchenManager");
 
-        let collection_products =
-            products::collection::ProductCollection::init(database.clone()).await;
         let collection_orders = orders::collection::OrderCollection::init(database.clone()).await;
 
         Database {
-            collection_products,
             collection_orders,
         }
-    }
-
-    pub async fn products(&self) -> &products::collection::ProductCollection
-    {
-        &self.collection_products
     }
 
     pub async fn orders(&self) -> &orders::collection::OrderCollection

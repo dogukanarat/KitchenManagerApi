@@ -4,13 +4,13 @@ use actix_web::{web, Responder, HttpResponse, http::header};
 
 use crate::{broadcast};
 
-pub async fn order_update(
+pub async fn order_create(
     broadcaster: web::Data<Mutex<broadcast::Broadcaster>>,
 ) -> impl Responder {
 
     let mut new_hashmap = HashMap::<String, String>::new();
 
-    new_hashmap.insert("order_update".to_string(), "".to_string());
+    new_hashmap.insert("order_create".to_string(), "".to_string());
 
     let rx = broadcaster.lock().unwrap().new_client(new_hashmap);
 

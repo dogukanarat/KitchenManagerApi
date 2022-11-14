@@ -10,7 +10,6 @@ use std::{env, str::FromStr};
 
 use super::model::*;
 use crate::console;
-use crate::products;
 
 #[derive(Clone)]
 pub struct OrderCollection
@@ -21,9 +20,7 @@ pub struct OrderCollection
 #[derive(Debug)]
 pub enum OrderCollectionError
 {
-    OneOfProductsNotFound,
     OrderNotFound,
-    OrderNotModified,
     CustomError(String),
 }
 
@@ -59,49 +56,23 @@ impl OrderCollection
     pub async fn create(
         &self,
         content: OrderCreateRequest,
-        collection_products: &products::collection::ProductCollection,
     ) -> Result<InsertOneResult, OrderCollectionError>
     {
-        info!("Creating order...");
-
-        let mut total_price = 0.0;
-
-        let mut status: OrderStatus = OrderStatus::Completed;
-
-        for product_view in content.clone().products
-        {
-            let product_id = product_view.id;
-
-            let product_result = collection_products.get(product_id).await;
-
-            match product_result
-            {
-                Ok(product) =>
-                {
-                    total_price += product.price * product_view.quantity as f32;
-
-                    if product.kind != products::model::ProductKind::ReadyMade
-                    {
-                        status = OrderStatus::Pending;
-                    }
-                },
-                Err(error) => return Err(OrderCollectionError::OneOfProductsNotFound),
-            }
-        }
+        self.info("Order create requested").await;
 
         let new_order = Order {
             id: None,
-            order_id: 0,
-            products: content.products,
-            total_price: total_price,
-            status: status,
+            order_id: content.id,
+            order_shelf: content.shelf,
             created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
         };
 
-        let result = self.collection_order.insert_one(new_order, None).await;
+        let inser_one_result = self.collection_order.insert_one(
+            new_order,
+            None
+        ).await;
 
-        match result
+        match inser_one_result
         {
             Ok(result) => Ok(result),
             Err(error) => Err(OrderCollectionError::CustomError(error.to_string())),
@@ -113,7 +84,7 @@ impl OrderCollection
     ///
     pub async fn list(&self, offset: u64, limit: i64) -> Result<Vec<Order>, OrderCollectionError>
     {
-        info!("Getting all orders...");
+        self.info("List orders requested").await;
 
         let find_options = mongodb::options::FindOptions::builder()
             .skip(offset)
@@ -154,7 +125,7 @@ impl OrderCollection
     /// ```
     pub async fn get(&self, req_id: String) -> Result<Order, OrderCollectionError>
     {
-        info!("Getting order...");
+        self.info("Single order get requested").await;
 
         let id = ObjectId::from_str(&req_id).unwrap();
 
@@ -173,48 +144,6 @@ impl OrderCollection
         }
     }
 
-    /// Update a single order
-    ///
-    /// # Arguments
-    ///
-    /// * `id` - ObjectId
-    /// * `order_id` - String
-    /// * `content` - OrderUpdateRequest
-    ///
-    /// ```
-    /// # Examples
-    ///
-    /// ```
-    pub async fn update(
-        &self,
-        req_id: String,
-        content: OrderUpdateRequest,
-    ) -> Result<UpdateResult, OrderCollectionError>
-    {
-        info!("Updating order...");
-
-        let id = ObjectId::from_str(&req_id).unwrap();
-
-        let filter = doc! { "_id": id };
-
-        let status_as_string = bson::to_bson(&content.status).unwrap();
-        let status = status_as_string.as_str().unwrap();
-
-        let update = doc! { "$set": { "status": status } };
-
-        let result = self.collection_order.update_one(filter, update, None).await;
-
-        match result
-        {
-            Ok(result) => match result.modified_count
-            {
-                1 => Ok(result),
-                _ => Err(OrderCollectionError::OrderNotModified),
-            },
-            Err(error) => Err(OrderCollectionError::CustomError(error.to_string())),
-        }
-    }
-
     /// Delete a single order
     /// 
     /// # Arguments
@@ -227,15 +156,15 @@ impl OrderCollection
     /// ```
     pub async fn delete(&self, req_id: String) -> Result<DeleteResult, OrderCollectionError>
     {
-        info!("Deleting order...");
+        self.info("Single order delete requested").await;
 
         let id = ObjectId::from_str(&req_id).unwrap();
 
         let filter = doc! { "_id": id };
 
-        let result = self.collection_order.delete_one(filter, None).await;
+        let delete_one_result = self.collection_order.delete_one(filter, None).await;
 
-        match result
+        match delete_one_result
         {
             Ok(result) => match result.deleted_count
             {
@@ -244,5 +173,10 @@ impl OrderCollection
             },
             Err(error) => Err(OrderCollectionError::CustomError(error.to_string())),
         }
+    }
+
+    pub async fn info(&self, msg: &str)
+    {
+        info!("[OrderCollection] {}", msg);
     }
 }

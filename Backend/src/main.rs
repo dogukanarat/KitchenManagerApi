@@ -6,7 +6,7 @@
 use actix_cors::Cors;
 use actix_files::{Files, NamedFile};
 use actix_web::{
-    get, guard, http::header, middleware, post, web, App, HttpResponse, HttpServer, Responder,
+    get, guard, http::header, middleware, post, web, App, HttpResponse, HttpServer, Responder, http
 };
 
 use dotenv::dotenv;
@@ -26,7 +26,6 @@ mod console;
 mod constants;
 mod database;
 mod orders;
-mod products;
 
 #[actix_rt::main]
 async fn main() -> io::Result<()> {
@@ -51,22 +50,11 @@ async fn main() -> io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
-            .wrap(
-                Cors::default()
-                    .send_wildcard()
-                    .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
-                    // .allowed_headers(vec![
-                    //     header::AUTHORIZATION,
-                    //     header::ACCEPT,
-                    //     header::CONTENT_TYPE,
-                    // ])
-                    .max_age(3600),
-            )
+            .wrap(Cors::permissive())
             .app_data(web::Data::new(database_manager.clone()))
             .app_data(web::Data::from(Arc::clone(&broadcast_manager)))
             .service(
                 web::scope("/v1")
-                    .configure(products::config)
                     .configure(orders::config),
             )
             .route("/", web::get().to(index))
@@ -98,9 +86,9 @@ async fn index() -> impl Responder {
         <script>
             let root = document.getElementById("root");
 
-            let events = new EventSource("/v1/orders/events/update");
+            let events = new EventSource("/v1/orders/events/create");
             
-            events.addEventListener("order_update", (event) => {
+            events.addEventListener("order_create", (event) => {
                 let data = document.createElement("p");
                 root.appendChild(data);
                 data.innerText = event.data;
